@@ -40,6 +40,7 @@ m = pd.read_csv(f"{D}/message_notes.csv")
 nb = make_pipeline(CountVectorizer(), MultinomialNB()).fit(m.text, m.label)
 
 app = Flask(__name__)
+CORS(app)
 @app.route("/")
 def index(): return render_template("index.html")
 @app.route("/api/health")
