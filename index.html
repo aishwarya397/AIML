@@ -1,0 +1,245 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Signal Blackout: The Last Transmission</title>
+<style>
+:root{--amb:#e0a84a;--br:#a9763c;--red:#c2483e;--tx:#efe9da;--bg:#1d1f23;--steel:#7fa3c4}
+*{box-sizing:border-box}body{margin:0;background:#000;color:var(--tx);font-family:'Segoe UI',Helvetica,sans-serif;overflow:hidden}canvas{display:block}
+.ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(#2a2620,#0c0c0e);text-align:center;padding:24px;z-index:9}
+h1{font:300 46px Georgia,serif;letter-spacing:.35em;color:var(--amb);margin:0}h2{font:300 15px Georgia;letter-spacing:.5em;margin:8px 0 28px}
+button{background:transparent;color:var(--tx);border:1px solid var(--br);padding:10px 24px;font:600 12px 'Segoe UI';letter-spacing:.18em;cursor:pointer;margin:5px;transition:.2s}button:hover{background:var(--br);color:#111}
+.fade{opacity:0;animation:f 1.4s forwards}@keyframes f{to{opacity:1}}.ov p{max-width:500px;line-height:1.7;color:#cfc8b8}
+#hud{position:fixed;top:12px;left:12px;right:12px;display:none;justify-content:space-between;font-size:12px;letter-spacing:.12em;pointer-events:none;z-index:5}
+.chip{background:rgba(20,21,24,.72);border:1px solid #4b4033;padding:6px 12px}
+#ctl{position:fixed;bottom:12px;left:12px;font-size:11px;display:none;line-height:1.7;opacity:.85}#ctl b{color:var(--amb)}
+#obj{position:fixed;bottom:12px;right:12px;max-width:300px;display:none;border-left:3px solid var(--amb);font-size:12px;line-height:1.5}
+#cross{position:fixed;left:50%;top:50%;width:5px;height:5px;margin:-2px;border-radius:50%;background:#fff;opacity:.7;display:none}
+#hint{position:fixed;left:50%;top:57%;transform:translateX(-50%);display:none;text-align:center;font-size:12px;letter-spacing:.15em}#hint b{display:block;color:var(--amb);margin-top:3px}
+#sub{position:fixed;left:50%;bottom:16%;transform:translateX(-50%);max-width:560px;text-align:center;font:italic 15px Georgia;text-shadow:0 0 6px #000;display:none;z-index:6}
+#panel{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,6,8,.72);z-index:8}
+#card{width:min(480px,92%);background:linear-gradient(#26282c,#1b1c20);border:1px solid var(--br);box-shadow:0 20px 60px #000;padding:0;animation:f .3s forwards}
+.hd{padding:14px 22px;border-bottom:1px solid #3a342c;font-size:11px;letter-spacing:.25em;color:var(--amb);display:flex;justify-content:space-between}
+.bd{padding:20px 22px;line-height:1.55}.bd h3{margin:0 0 8px;font:400 22px Georgia}.kv{background:#121316;border:1px solid #333;margin:14px 0;padding:6px 14px}.kv div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #26272b}.kv div:last-child{border:0}.kv b{color:var(--amb)}.kv .w{color:#e57a70}
+.q{font-weight:600;margin:12px 0 4px}.paper{background:#e6dcc0;color:#2a241a;font:italic 17px Georgia;padding:16px;transform:rotate(-.8deg);margin:12px 0}
+.res{margin-top:12px;padding:10px 14px;border-left:3px solid var(--steel);background:#16222c}.res.bad{border-color:var(--red);background:#2b1a19}.clue{margin-top:10px;color:var(--amb);font-style:italic}
+details{margin-top:12px;font-size:12px;color:#aaa}summary{cursor:pointer}.row{display:flex;flex-wrap:wrap}
+.node{border:1px solid #4b4033;padding:10px;margin:6px 0;position:relative;background:#14151a}.node.ok{border-color:var(--amb)}.node small{color:#999;display:block}
+</style></head><body>
+<div id="intro" class="ov"><h1>SIGNAL BLACKOUT</h1><h2>THE LAST TRANSMISSION</h2>
+<p class="fade" style="animation-delay:.4s">Harbour Night Radio died at 02:17 AM. The technician is missing. His recording is gone.</p>
+<p class="fade" style="animation-delay:2s">Search. Solve. Find the truth.</p>
+<div class="fade" style="animation-delay:3.4s"><button id="start">START INVESTIGATION</button><button id="snd">SOUND: ON</button>
+<p style="font-size:12px;margin-top:14px">W A S D move · Mouse look · E investigate · Shift run · J case board · Esc pause</p></div></div>
+<div id="pause" class="ov" style="display:none;background:rgba(8,8,10,.85)"><h2>PAUSED</h2><button id="resume">RESUME</button><button onclick="location.reload()">RESTART</button><button id="snd2">TOGGLE SOUND</button></div>
+<div id="hud"><div class="chip" id="room"></div><div class="chip" id="time"></div><div class="chip" id="evc"></div><div class="chip" id="prog"></div></div>
+<div id="ctl"><b>W A S D</b> move · <b>MOUSE</b> look · <b>E</b> investigate · <b>SHIFT</b> run · <b>J</b> case board · <b>ESC</b> pause</div>
+<div id="obj" class="chip"></div><div id="cross"></div><div id="hint"></div><div id="sub"></div><div id="panel"><div id="card"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=i=>document.getElementById(i),S={found:{},done:{},sound:true,t:1200,open:false,over:false,doors:[0,0],evs:{},facts:[]};
+let ac,gain;function audio(){if(ac||!S.sound)return;ac=new AudioContext();const b=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*.5;
+const n=ac.createBufferSource();n.buffer=b;n.loop=true;const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=300;gain=ac.createGain();gain.gain.value=.04;n.connect(f).connect(gain).connect(ac.destination);n.start();
+const o=ac.createOscillator();o.frequency.value=50;const g=ac.createGain();g.gain.value=.03;o.connect(g).connect(ac.destination);o.start()}
+function blip(fr=400,len=.12,v=.08){if(!ac||!S.sound)return;const o=ac.createOscillator(),g=ac.createGain();o.type='triangle';o.frequency.value=fr;g.gain.value=v;g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+len);o.connect(g).connect(ac.destination);o.start();o.stop(ac.currentTime+len)}
+function burst(ms=500){if(!ac||!S.sound)return;gain.gain.value=.3;setTimeout(()=>gain.gain.value=S.sound?.04:0,ms)}
+function thud(){blip(70,.4,.25)}
+const tgl=()=>{S.sound=!S.sound;$('snd').textContent='SOUND: '+(S.sound?'ON':'OFF');if(ac)gain.gain.value=S.sound?.04:0};$('snd').onclick=$('snd2').onclick=tgl;
+let subT;function say(t,ms=4500){const s=$('sub');s.textContent=t;s.style.display='block';clearTimeout(subT);subT=setTimeout(()=>s.style.display='none',ms)}
+// ---------- renderer ----------
+const R=new THREE.WebGLRenderer({antialias:true});R.setSize(innerWidth,innerHeight);R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.25;R.outputEncoding=THREE.sRGBEncoding;document.body.appendChild(R.domElement);
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x0a0a0c);sc.fog=new THREE.FogExp2(0x0c0c10,.035);
+const cam=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.05,80);cam.position.set(-4,1.65,3.5);cam.rotation.order='YXZ';sc.add(cam);
+addEventListener('resize',()=>{R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
+// ---------- textures ----------
+function ctex(w,h,fn,rep=[1,1]){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');fn(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(...rep);t.anisotropy=4;t.encoding=THREE.sRGBEncoding;return t}
+const rnd=Math.random;
+function noise(x,w,h,n,a){for(let i=0;i<n;i++){const g=rnd()*255|0;x.fillStyle=`rgba(${g},${g},${g},${rnd()*a})`;x.fillRect(rnd()*w,rnd()*h,1+rnd()*3,1+rnd()*3)}}
+const T={
+concrete:ctex(256,256,(x,w,h)=>{x.fillStyle='#5b5e60';x.fillRect(0,0,w,h);noise(x,w,h,5000,.25);for(let i=0;i<6;i++){const g=x.createRadialGradient(rnd()*w,rnd()*h,2,rnd()*w,rnd()*h,60);g.addColorStop(0,'rgba(20,20,20,.25)');g.addColorStop(1,'transparent');x.fillStyle=g;x.fillRect(0,0,w,h)}x.strokeStyle='rgba(0,0,0,.3)';x.strokeRect(0,0,w,h)},[4,2]),
+plaster:ctex(256,256,(x,w,h)=>{x.fillStyle='#6b5d4a';x.fillRect(0,0,w,h);noise(x,w,h,4000,.2);x.fillStyle='rgba(30,22,12,.5)';x.fillRect(0,h*.62,w,h*.38)},[4,1]),
+wood:ctex(256,256,(x,w,h)=>{x.fillStyle='#4a2f1d';x.fillRect(0,0,w,h);for(let i=0;i<90;i++){x.strokeStyle=`rgba(${20+rnd()*40|0},${10+rnd()*20|0},5,.35)`;x.beginPath();const y=rnd()*h;x.moveTo(0,y);x.bezierCurveTo(w/3,y+rnd()*6-3,w*.6,y+rnd()*6-3,w,y);x.stroke()}},[1,1]),
+tile:ctex(256,256,(x,w,h)=>{x.fillStyle='#3a3834';x.fillRect(0,0,w,h);for(let i=0;i<4;i++)for(let j=0;j<4;j++){x.fillStyle=`hsl(40,6%,${20+rnd()*8}%)`;x.fillRect(i*64+2,j*64+2,60,60)}noise(x,w,h,3000,.2)},[6,5]),
+panelAc:ctex(128,128,(x,w,h)=>{x.fillStyle='#3a2a1f';x.fillRect(0,0,w,h);for(let i=0;i<w;i+=8){x.fillStyle=`rgba(0,0,0,${.15+(i/8%2)*.15})`;x.fillRect(i,0,4,h)}noise(x,w,h,800,.2)},[6,1]),
+grate:ctex(64,64,(x,w,h)=>{x.fillStyle='#2b2e31';x.fillRect(0,0,w,h);x.fillStyle='#111';for(let i=4;i<w;i+=8)x.fillRect(i,4,4,h-8)},[1,1]),
+paper:ctex(128,128,(x,w,h)=>{x.fillStyle='#d9cfb4';x.fillRect(0,0,w,h);x.fillStyle='rgba(40,40,40,.5)';for(let y=14;y<h-8;y+=9)x.fillRect(10,y,50+rnd()*60,2);noise(x,w,h,300,.2)}),
+};
+const mat=(o)=>new THREE.MeshStandardMaterial(o);
+const MT={concrete:mat({map:T.concrete,roughness:.95}),plaster:mat({map:T.plaster,roughness:.9}),wood:mat({map:T.wood,roughness:.55}),
+tile:mat({map:T.tile,roughness:.35,metalness:.1}),ac:mat({map:T.panelAc,roughness:1}),steel:mat({color:0x6a6f74,roughness:.35,metalness:.9}),dsteel:mat({color:0x3c4146,roughness:.5,metalness:.8}),
+black:mat({color:0x121214,roughness:.4,metalness:.5}),paper:mat({map:T.paper,roughness:.9}),rubber:mat({color:0x1a1a1a,roughness:.9}),olive:mat({color:0x3d4a3c,roughness:.6,metalness:.5}),
+glass:mat({color:0x8fb0c8,roughness:.05,metalness:.2,transparent:true,opacity:.14}),red:mat({color:0x7d1f1a,roughness:.5,metalness:.3}),brass:mat({color:0xa5783a,roughness:.35,metalness:.9}),
+rug:mat({color:0x4a2a24,roughness:1}),cloth:mat({color:0x2a2f2a,roughness:1})};
+// ---------- geometry helpers ----------
+const solids=[],inter=[],flick=[],screens=[];
+function box(w,h,d,m,x,y,z,col=true,cast=true){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=cast;o.receiveShadow=true;sc.add(o);
+ if(col){const c={x0:x-w/2,x1:x+w/2,z0:z-d/2,z1:z+d/2,y0:y-h/2,y1:y+h/2,on:true};solids.push(c);o.userData.col=c}return o}
+function cyl(r,h,m,x,y,z,rx=0,rz=0,seg=14){const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg),m);o.position.set(x,y,z);o.rotation.x=rx;o.rotation.z=rz;o.castShadow=true;sc.add(o);return o}
+function item(id,name,o,hidden=false){o.userData.id=id;o.userData.name=name;if(hidden)o.visible=false;inter.push(o);return o}
+function canvasPlane(w,h,tex,x,y,z,ry=0,emit=true){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),emit?new THREE.MeshBasicMaterial({map:tex}):new THREE.MeshStandardMaterial({map:tex}));m.position.set(x,y,z);m.rotation.y=ry;sc.add(m);return m}
+function monitor(x,y,z,ry,col){const g=box(.62,.42,.08,MT.black,x,y,z,false);g.rotation.y=ry;const s=new THREE.Mesh(new THREE.PlaneGeometry(.54,.34),new THREE.MeshBasicMaterial({color:col}));s.position.set(x,y,z);s.translateZ(.05);s.rotation.y=ry;sc.add(s);screens.push(s);box(.06,.2,.06,MT.black,x,y-.3,z,false);return s}
+function mic(x,y,z){cyl(.012,.4,MT.steel,x,y+.2,z);cyl(.07,.015,MT.black,x,y,z);const m=cyl(.035,.16,MT.dsteel,x,y+.45,z,Math.PI/2.4);cyl(.04,.05,MT.brass,x,y+.5,z+.04,Math.PI/2.4)}
+function chair(x,z,ry=0){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;sc.add(g);const p=(w,h,d,m,a,b,c)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(a,b,c);o.castShadow=true;g.add(o)};p(.5,.08,.5,MT.rubber,0,.5,0);p(.5,.55,.08,MT.rubber,0,.82,.25);p(.05,.45,.05,MT.steel,0,.25,0);p(.5,.04,.05,MT.steel,0,.05,0);p(.05,.04,.5,MT.steel,0,.05,0);solids.push({x0:x-.3,x1:x+.3,z0:z-.3,z1:z+.3,y0:0,y1:1,on:true})}
+function files(x,y,z,n,dir=1){for(let i=0;i<n;i++){const c=new THREE.Color().setHSL(.08+rnd()*.05,.25,.2+rnd()*.15);box(.05+rnd()*.04,.26+rnd()*.05,.22,mat({color:c,roughness:.9}),x+i*.07*dir,y,z,false)}}
+function light(c,i,d,x,y,z,sh=false,f=false){const l=new THREE.PointLight(c,i,d,1.6);l.position.set(x,y,z);if(sh){l.castShadow=true;l.shadow.mapSize.set(1024,1024)}sc.add(l);if(f)flick.push({l,base:i});return l}
+function lamp(x,y,z,c){const o=new THREE.Mesh(new THREE.BoxGeometry(1.1,.06,.2),new THREE.MeshBasicMaterial({color:c}));o.position.set(x,y,z);sc.add(o)}
+function cone(x,z,c,h=3.4){const m=new THREE.Mesh(new THREE.ConeGeometry(1.6,h,24,1,true),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.05,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));m.position.set(x,h/2+.05,z);sc.add(m)}
+function clockTex(h,m,broken){return ctex(128,128,x=>{x.fillStyle='#d9d2bd';x.beginPath();x.arc(64,64,60,0,7);x.fill();x.strokeStyle='#222';x.lineWidth=5;x.stroke();x.lineWidth=2;for(let i=0;i<12;i++){const a=i*Math.PI/6;x.beginPath();x.moveTo(64+Math.sin(a)*50,64-Math.cos(a)*50);x.lineTo(64+Math.sin(a)*57,64-Math.cos(a)*57);x.stroke()}
+ const hand=(a,l,w)=>{x.lineWidth=w;x.beginPath();x.moveTo(64,64);x.lineTo(64+Math.sin(a)*l,64-Math.cos(a)*l);x.stroke()};hand((h%12+m/60)*Math.PI/6,32,5);hand(m*Math.PI/30,48,3);if(broken){x.strokeStyle='#111';x.lineWidth=2;x.beginPath();x.moveTo(30,20);x.lineTo(70,70);x.lineTo(60,110);x.stroke()}})}
+// ---------- rooms shell ----------
+const WALL=[MT.plaster,MT.concrete,MT.plaster],FLOOR=[MT.tile,MT.concrete,MT.wood],H=3.6;
+for(let i=0;i<3;i++){const cx=i*12;box(12,.2,10,FLOOR[i],cx,-.1,0,false);box(12,.2,10,i==1?MT.concrete:MT.plaster,cx,H+.1,0,false);
+ box(12,H,.3,WALL[i],cx,H/2,-5.15);box(12,H,.3,WALL[i],cx,H/2,5.15);if(i==0)box(.3,H,10,WALL[0],-6.15,H/2,0);
+ if(i<2){box(.3,H,4,WALL[i],cx+6,H/2,-3);box(.3,H,4,WALL[i],cx+6,H/2,3);box(.3,H-2.5,2,WALL[i],cx+6,H-.55,0,false)}else box(.3,H,10,WALL[2],cx+6.15,H/2,0)}
+sc.add(new THREE.HemisphereLight(0x6a6a80,0x1a1410,.55));
+// ===== ROOM 1: STUDIO (warm tungsten) =====
+light(0xffa347,1.9,13,0,3.2,-1,true);light(0xff8c3a,1.1,8,-3.6,2.6,2.5);light(0xff2a1a,.8,6,-5.5,3,-4.5,false,true);light(0xffb060,.8,6,3.6,1.5,-3.6);
+cone(0,-1,0xffb060);lamp(0,3.5,-1,0xffe0b0);lamp(0,3.5,2,0xffd0a0);
+box(12,2.2,.1,MT.ac,0,1.5,-4.95,false);box(.1,2.2,10,MT.ac,-5.95,1.5,0,false);// acoustic panels
+const rug=box(5,.02,3.5,MT.rug,-.5,.01,.8,false,false);
+box(5.6,.08,1.3,MT.wood,0,.95,-3.5);box(5.5,.9,1.2,MT.dsteel,0,.45,-3.5);// broadcast desk
+for(let k=0;k<3;k++){const b=box(1.5,.12,.8,MT.black,-1.8+k*1.8,1.04,-3.45,false);b.rotation.x=-.18;for(let j=0;j<16;j++){const c=new THREE.Mesh(new THREE.BoxGeometry(.04,.05,.07),new THREE.MeshStandardMaterial({color:j%5?0xcfc8b0:0xb4443c,emissive:j%5?0x1a1408:0x400000}));c.position.set(-2.4+k*1.8+j*.09,1.1,-3.4);sc.add(c)}for(let j=0;j<5;j++)cyl(.02,.05,MT.brass,-2.4+k*1.8+j*.28,1.1,-3.62)}
+mic(-2.2,1.0,-3.0);mic(2.2,1.0,-3.0);mic(0,1.0,-3.0);
+[0,.7].forEach(o=>{monitor(-1+o*2.5,1.55,-4.7,0,[0x2a4a34,0x4a3322][o?1:0])});monitor(2.2,1.55,-4.7,0,0x203a52);
+box(.28,.05,.2,MT.black,-1.2,1.0,-2.95,false);box(.28,.05,.2,MT.black,-.9,1.0,-2.9,false);
+chair(-1,-2.3,.3);chair(1.5,-2.2,-.4);
+// glass booth
+box(.08,2.2,6,MT.glass,-2.5,1.5,1,false,false);box(.1,2.3,.1,MT.dsteel,-2.5,1.15,-2);box(.1,2.3,.1,MT.dsteel,-2.5,1.15,4);box(.1,.08,6,MT.dsteel,-2.5,.4,1,false);box(.1,.08,6,MT.dsteel,-2.5,2.6,1,false);
+// ON AIR sign + clock
+const onair=new THREE.Mesh(new THREE.PlaneGeometry(1.1,.4),new THREE.MeshBasicMaterial({map:ctex(128,48,x=>{x.fillStyle='#4a0f0c';x.fillRect(0,0,128,48);x.fillStyle='#ff4a3a';x.font='bold 30px Arial';x.fillText('ON AIR',10,36)})}));onair.position.set(4.6,3.0,-4.97);sc.add(onair);light(0xff2a1a,.7,5,4.6,2.8,-4.2,false,true);
+canvasPlane(.6,.6,clockTex(2,17),-5.5,2.8,-4.96,0);const clk=box(.7,.7,.05,MT.dsteel,-5.5,2.8,-5.0,false);item('clock','Wall Clock',clk);
+// right shelving + side table with damaged recorder
+box(.5,2.4,2.6,MT.wood,5.7,1.2,-3.6);files(5.55,.5,-4.4,8);files(5.55,1.2,-4.4,8);files(5.55,1.9,-3.4,8);box(.5,2.4,2.6,MT.wood,5.7,1.2,3.6);files(5.55,.5,2.6,8);files(5.55,1.4,2.8,8);
+box(1,.8,.7,MT.wood,3.6,.4,-1.2);box(.6,.22,.4,MT.dsteel,3.6,.91,-1.2,false);cyl(.07,.03,MT.black,3.45,1.05,-1.2,Math.PI/2);cyl(.07,.03,MT.black,3.75,1.05,-1.2,Math.PI/2);
+item('recorder','Damaged Recording Machine',box(.6,.1,.4,MT.red,3.6,1.04,-1.2,false));
+// left desk with half open drawer
+box(1.6,.8,.8,MT.wood,-5.3,.4,2.8);box(1.7,.05,.9,MT.wood,-5.3,.83,2.8,false);
+const dr=item('drawer','Suspicious Drawer',box(.5,.22,.7,mat({color:0x5a3a24,roughness:.6}),-4.5,.62,2.75,false));dr.userData.open=false;
+const log=item('log','Security Access Log',box(.28,.012,.36,MT.paper,-4.3,.75,2.75,false),true);log.rotation.y=.3;
+// clutter: papers, mug, headphones, folders
+for(let i=0;i<6;i++){const p=box(.28,.008,.36,MT.paper,-2+i*.9+rnd()*.3,1.0,-3.3+rnd()*.4,false);p.rotation.y=rnd()*3}
+cyl(.045,.1,mat({color:0xe8e2d0,roughness:.4}),2.9,1.05,-3.1);cyl(.04,.01,mat({color:0x2a1608}),2.9,1.095,-3.1);
+cyl(.1,.012,MT.black,-3.3,1.0,-3.2,0,0);box(.2,.04,.18,MT.black,-3.3,1.04,-3.2,false);
+item('photo','Framed Photograph',box(.3,.22,.03,mat({map:ctex(64,48,x=>{x.fillStyle='#8a7a5a';x.fillRect(0,0,64,48);x.fillStyle='#30281a';x.fillRect(12,10,16,26);x.fillRect(36,12,16,24)}),roughness:.5}),-5.5,.98,2.5,false));
+item('mark','Strange Marking: "TX?"',box(.5,.5,.02,mat({color:0x3a3d40,roughness:.8}),-1.2,1.5,-4.96,false));
+item('memo',"Director's Memo",box(.28,.012,.36,MT.paper,-.9,1.02,-3.0,false)).rotation.y=-.2;
+// service door
+const door1=item('door1','Service Door',box(.2,2.5,2,MT.dsteel,6,1.25,0));
+// ===== ROOM 2: CORRIDOR (cold steel) =====
+light(0x7fa6d0,1.5,12,12,3.1,0,true,true);light(0x4a6a9a,1,9,8.5,3,3);light(0x4a6a9a,1,9,15.5,3,-3,false,true);light(0xff3a2a,.9,5,17,3.1,0,false,true);cone(12,0,0x7fa6d0);
+[8,10.5,13,15.5].forEach(x=>lamp(x,3.5,0,0x9bbbe0));
+for(let k=0;k<3;k++){cyl(.1,11.6,MT.steel,12,3.3-k*.28,-4.5+k*.2,0,Math.PI/2);}cyl(.06,11.6,MT.dsteel,12,3.45,4.6,0,Math.PI/2);for(let z=-1;z<=1;z+=1)box(.03,.03,2.6,MT.dsteel,12+z*3,3.4,-1+.8*z,false);
+for(let x=7;x<17.5;x+=2.2)box(.1,.35,.1,MT.dsteel,x,3.3,-4.5,false);
+// cabinets along back, shelves along front
+[7,8.1,9.2].forEach(x=>box(1,2,.5,MT.olive,x,1,-4.8));box(1.3,1.1,.25,MT.dsteel,14,1.5,-4.95);
+for(let i=0;i<4;i++)cyl(.04,.02,i%2?mat({color:0xcc3322,emissive:0x440000}):mat({color:0x33cc44,emissive:0x044411}),13.7+i*.18,1.8,-4.8,Math.PI/2);
+const panel=item('panel','Electrical Panel Cover',box(.9,1.2,.1,MT.dsteel,16,1.5,-4.9));
+const rcv=item('receiver','Damaged Signal Receiver',box(.55,.3,.35,MT.black,16,1.3,-4.7,false),true);cyl(.01,.5,MT.steel,16.1,1.7,-4.7);
+box(.9,2.2,.45,MT.wood,8.2,1.1,4.75);files(7.9,.7,4.75,8);files(7.9,1.4,4.75,8);box(.9,2.2,.45,MT.wood,9.2,1.1,4.75);files(8.9,.9,4.75,8);
+box(.5,2,.5,MT.dsteel,11.5,1,4.7);// trolley
+box(.9,.05,.55,MT.dsteel,13.2,.8,2.4);box(.9,.05,.55,MT.dsteel,13.2,.25,2.4,false);[[-.4,-.25],[.4,-.25],[-.4,.25],[.4,.25]].forEach(p=>box(.04,.8,.04,MT.dsteel,13.2+p[0],.4,2.4+p[1],false));solids.push({x0:12.7,x1:13.7,z0:2.1,z1:2.7,y0:0,y1:.9,on:true});
+cyl(.13,.1,MT.rubber,13.0,.95,2.4);box(.3,.12,.2,MT.red,13.5,.9,2.4,false);
+item('idcard','Torn Staff Badge',box(.22,.012,.14,mat({color:0x2a4a6a,roughness:.5}),13.2,.29,2.5,false));item('toolbox','Suspicious Toolbox',box(.55,.26,.28,mat({color:0x8a2a22,roughness:.45,metalness:.5}),14.6,.13,3.9));
+for(const [x,z] of [[7.4,-4.4],[16.6,4.4]]){const c=box(.2,.15,.3,MT.black,x,3.2,z,false);cyl(.03,.03,mat({color:0xff2a1a,emissive:0xff1100}),x,3.2,z+(z<0?.18:-.18),Math.PI/2)}
+canvasPlane(.5,.5,clockTex(4,40,true),6.12+.01,2.5,-3.8,Math.PI/2);item('clock2','Broken Wall Clock',box(.05,.55,.55,MT.dsteel,6.1,2.5,-3.8,false));
+const door2=item('door2','Damaged Security Door',box(.2,2.5,2,mat({color:0x4a5258,roughness:.5,metalness:.8}),18,1.25,0));
+item('trx','Transmitter Room (Locked)',box(1.3,2.3,.1,MT.dsteel,11,1.15,-4.97));
+// ===== ROOM 3: ARCHIVE (green / bronze) =====
+light(0x9ab58a,1.3,12,24,3.1,-2,true);light(0xc89a4a,1,7,24.5,1.6,0);light(0x4a7a5a,.7,8,28.5,2.8,3.5);cone(24,0,0x9ab58a);[21,25].forEach(x=>lamp(x,3.5,-2,0xc9dfb0));
+for(let r=0;r<2;r++){for(let k=0;k<5;k++){box(.9,2.2,.6,MT.olive,19.2+k*1,1.1,-4.7+r*0,k<5&&r==0);}}
+for(let k=0;k<3;k++){box(1,2.4,.45,MT.wood,22+k*1.5,1.2,-1.8-0,true);box(1,2.4,.45,MT.wood,22+k*1.5,1.2,-3,true);for(let l=0;l<5;l++)files(21.7+k*1.5,.4+l*.45,-1.8,10);}
+box(.5,2.4,5,MT.wood,29.6,1.2,-1);for(let l=0;l<5;l++)files(29.4,.4+l*.45,-3,10);for(let l=0;l<3;l++)files(29.4,.4+l*.45,0,10);
+box(2.4,.08,1.1,MT.wood,25,.85,1.8);box(2.3,.8,1,MT.dsteel,25,.4,1.8);box(.5,.4,.5,MT.black,24.2,1.1,1.8,false);monitor(24.2,1.4,1.8,0,0x1e4a2e);monitor(25.7,1.4,1.8,Math.PI,0x2a2a1a);
+for(let i=0;i<4;i++){const b=box(.45,.3,.35,mat({color:0x7a6240,roughness:1}),20.5+i*.5,.15+(i%2)*.3,3.8);}box(.4,.3,.35,mat({color:0x7a6240}),27,.15,3.6);box(.4,.3,.35,mat({color:0x7a6240}),27,.45,3.6);
+chair(25,3.1,Math.PI);item('riddle',"Elias's Riddle Card",box(.3,.012,.2,MT.paper,21,.62,3.8,false));item('invoices','Maintenance Invoices',box(.3,.012,.38,MT.paper,25.8,.91,1.5,false)).rotation.y=.4;item('email','Terminal Email',box(.54,.34,.01,mat({color:0x0a2a14,emissive:0x0c4a22}),24.2,1.4,1.92,false));
+const fc=box(.7,1.4,.5,MT.dsteel,28.5,.7,4.7);const fd=item('filedrawer','Locked File Drawer',box(.6,.3,.04,MT.brass,28.5,1.1,4.43,false));fd.userData.open=false;
+const note=item('note','Handwritten Note',box(.3,.012,.22,MT.paper,28.5,1.43,4.62,false),true);
+const cab=item('cab','Evidence Cabinet',box(1.2,2.1,.6,mat({color:0x2f3d33,roughness:.4,metalness:.7}),23.5,1.05,4.65));
+const tape=item('tape','The Missing Recording',box(.34,.08,.24,MT.black,23.5,1.1,4.22,false),true);
+const door3=null;
+// ---------- evidence data ----------
+const E={
+ clock:{t:'Stopped Clock',x:'The hands stopped at 02:17, the moment of the blackout.',glyph:'🕑'},
+ mark:{t:'Strange Marking',x:'Scratched into the panel: "TX-04 = NOTHING". Elias left this on purpose.',glyph:'✎',fact:'Elias suspected TX-04 was a dead transmitter.'},
+ photo:{t:'Photograph',x:'Elias beside a suited man at a tower. The caption: "With Director M. Hale, 2019".',glyph:'🖼',fact:'Elias once worked closely with Director Marcus Hale.'},
+ recorder:{t:'Recording Machine',x:'The reel is missing. The case label reads: "ELIAS · 02:17 ANNOUNCEMENT".',glyph:'⏺',fact:'Elias had recorded a 02:17 announcement. The original tape is gone.'},
+ clock2:{t:'Broken Clock',x:'Smashed at 02:14, the same night.',glyph:'🕑'},
+ toolbox:{t:'Toolbox',x:'A badge programmer with a sticky tag: "M.H.". Someone cloned a staff badge here.',glyph:'🧰',fact:'A badge cloner tagged "M.H." was left in the corridor.'},
+ trx:{t:'Transmitter Room',x:'Locked. Whatever happened here, the signal came from outside the room.',glyph:'📡'},
+ riddle:{t:"Elias's Riddle Card",x:'Handwritten: "I have no mouth, yet I speak to thousands. No wings, yet I cross the hills. What am I?"',glyph:'?',fact:'Elias left a riddle card in the archive.'},
+ memo:{t:"Director's Memo",x:'"No night broadcast airs without my approval. Nothing goes out unchecked. M. Hale"',glyph:'✉',fact:'Director Hale had banned unapproved night broadcasts.'},
+ idcard:{t:'Torn Staff Badge',x:'Manager badge. Name torn: "M. HA…".',kv:[['Badge No.','0417']],glyph:'🪪',fact:'A torn manager badge, "M. HA…", was dropped near the door.'},
+ invoices:{t:'Maintenance Invoices',x:'TX-04 upkeep invoices, all signed by one man.',kv:[['Tower No.','04'],['Payments','6'],['Closed (year)','2021',1],['Signed by','M. Hale',1]],fact:'Hale billed the station for a tower that no longer exists.'},
+ email:{t:'Terminal Email',x:'From M. Hale to Elias: "Drop the story or you are finished here. Do not go on air."',glyph:'✉',fact:'Hale threatened Elias to keep him off the air.'},
+ log:{t:'CLUE 01 · THE ACCESS LOG',x:'A suspicious entry was recorded at 02:13 AM.',kv:[['Time','02:13 AM'],['Badge','Unknown',1],['Forced entry','Yes',1],['Working hours','No',1]],q:'Was this entry authorised?',opts:['AUTHORIZED','UNAUTHORIZED'],api:'/api/access',body:{entry_hour:2,unknown_badge:1,forced_entry:1,outside_shift:1},key:'prediction',
+  ok:'Correct. Someone entered the studio without a valid badge.',clue:'The intruder entered four minutes before the final broadcast. The service door is now open.',why:r=>`Decision Tree: ${r.prediction} (${Math.round(r.confidence*100)}%). Key factors: ${r.factors.slice(0,3).map(f=>f.name.replace(/_/g,' ')).join(', ')}.`,n:1},
+ receiver:{t:'CLUE 02 · THE WRONG TRANSMITTER',x:'This receiver captured the signal used during the interruption. Identify its source.',kv:[['Frequency','104.2 MHz'],['Signal strength','81'],['Noise level','7']],q:'Which transmitter matches this signal?',opts:['TX-01','TX-02','TX-03','TX-04','TX-05'],api:'/api/signal',body:{frequency:104.2,strength:81,noise:7},key:'transmitter',
+  ok:'Match found: this signal came from {R}.',clue:'TX-04 was a dead tower. The signal was redirected. The security door is open.',why:r=>`KNN compared the signal with known transmitters. Nearest neighbours: ${r.neighbours.join(', ')}.`,n:2},
+ note:{t:'CLUE 03 · THE HIDDEN MESSAGE',paper:"Don't play the original recording. Check the backup at midnight. The truth is in TX-04.",x:'A handwritten note was locked in the file drawer.',q:'Is this a secret instruction or an ordinary note?',opts:['SECRET','ROUTINE'],api:'/api/message',body:{text:"Don't play the original recording. Check the backup at midnight. The truth is in TX-04."},key:'label',
+  ok:'Correct. This is a secret instruction.',clue:'Margin note: "Tower · Payments · Year". The cabinet needs a code.',why:r=>`Naive Bayes: ${r.label}. Words that pointed to SECRET: ${r.suspicious_words.join(', ')||'none'}.`,n:3},
+};
+const dbg={};
+// ---------- UI ----------
+const names=['Broadcast Studio','Service Corridor','Records Archive'];
+function objective(){const d=S.done;return S.over?'Case closed.':!d[1]?'Search the studio. Find the access log.':!d[2]?'Explore the corridor. Find what opens the panel.':!d[3]?'Search the archive. Find and solve Elias\'s riddle.':'Open the cabinet. Elias wrote how.'}
+function refresh(){$('evc').textContent=`EVIDENCE ${Object.keys(S.found).length}`;$('prog').textContent=`CLUES ${Object.keys(S.done).length}/3`;$('obj').innerHTML='<b style="color:var(--amb);letter-spacing:.2em;font-size:10px">OBJECTIVE</b><br>'+objective()}
+function openP(h,head='EVIDENCE'){S.open=true;document.exitPointerLock();$('card').innerHTML=`<div class="hd"><span>${head}</span><span>CASE 0217</span></div><div class="bd">${h}</div>`;$('panel').style.display='flex';blip(330,.1)}
+function closeP(){S.open=false;$('panel').style.display='none';if(!S.over)R.domElement.requestPointerLock()}
+const closeBtn='<div style="margin-top:14px"><button onclick="closeP()">CLOSE</button></div>';
+function open3(o,axis,d,then){const s=o.position[axis],t=s+d;let k=0;const id=setInterval(()=>{k+=.08;o.position[axis]=s+(t-s)*Math.min(1,k);if(k>=1){clearInterval(id);then&&then()}},16)}
+function reveal(o){o.visible=true;blip(520,.15)}
+function unlockDoor(n){const d=n==1?door1:door2;thud();burst(300);if(d.userData.col)d.userData.col.on=false;open3(d,'y',2.6);S.doors[n-1]=1}
+function openLock(title,hint,codes,ok){openP(`<h3>${title}</h3><div style="opacity:.85">${hint}</div><div style="margin:14px 0"><input id="lk" autocomplete="off" style="width:100%;padding:10px;background:#111;border:1px solid var(--br);color:var(--tx);font:22px monospace;letter-spacing:.3em;text-align:center"></div><button id="lkb">TRY</button><div id="lkm"></div>${closeBtn}`,'LOCKED');
+ const go=()=>{const v=$('lk').value.trim().toLowerCase().replace(/\s/g,'');if(v&&codes.includes(v)){closeP();ok()}else{$('lkm').innerHTML='<div class="res bad">Wrong. Look around again.</div>';blip(120,.2)}};
+ $('lkb').onclick=go;$('lk').onkeydown=e=>{e.stopPropagation();if(e.key=='Enter')go()};setTimeout(()=>$('lk').focus(),50)}
+function investigate(o){const id=o.userData.id;
+ if(id=='drawer'){if(!o.userData.open)openLock('Desk Drawer','4-digit lock. Something in this room stopped at the wrong moment.',['0217'],()=>{o.userData.open=true;open3(o,'x',.45,()=>reveal(log));say('Click. The drawer opens.');S.found.drawer=1;refresh()});return}
+ if(id=='panel'){if(!o.userData.open)openLock('Panel Lock','4-digit lock. The number belongs to someone. Find their badge.',['0417'],()=>{o.userData.open=true;thud();open3(o,'x',.9);reveal(rcv);say('The cover swings away.');S.found.panel=1;refresh()});return}
+ if(id=='filedrawer'){if(!S.done[2])return say('Locked. Finish the corridor first.');if(!o.userData.open)openLock('File Drawer','One-word lock. Elias left a riddle card somewhere in this room.',['radio','aradio','theradio'],()=>{o.userData.open=true;open3(o,'z',-.5,()=>reveal(note));S.found.filedrawer=1;refresh()});return}
+ if(id=='door1'||id=='door2')return say(id=='door1'?'Locked. The log on the desk may explain why.':'Jammed. The receiver may tell you who sabotaged it.');
+ if(id=='cab'){if(!S.done[3]){say('Locked. Analyse the hidden note first.');S.found.cab=1;return refresh()}if(!tape.visible){openLock('Evidence Cabinet','5-digit lock. Elias wrote how to build the code in the note margin.',['04621'],()=>{thud();reveal(tape);S.found.cab=1;say('The cabinet opens. A tape.');refresh()});return}return finale()}
+ if(id=='tape')return finale();
+ const e=E[id];if(!S.found[id]){S.found[id]=1;if(e.fact)S.facts.push(e.fact);refresh()}
+ let h=`<h3>${e.t}</h3><div>${e.x}</div>`;
+ if(e.paper)h+=`<div class="paper">${e.paper}</div>`;
+ if(e.kv)h+=`<div class="kv">${e.kv.map(k=>`<div><span>${k[0]}</span><b class="${k[2]?'w':''}">${k[1]}</b></div>`).join('')}</div>`;
+ if(e.q){if(S.done[e.n])h+=`<div class="res">${e.ok.replace('{R}','')}</div><div class="clue">${e.clue}</div>`;else h+=`<div class="q">${e.q}</div><div class="row">${e.opts.map(o=>`<button onclick="answer('${id}','${o}')">${o}</button>`).join('')}</div><div id="out"></div>`}
+ openP(h+closeBtn,e.q?'CLUE':'DETAIL')}
+async function answer(id,pick){const e=E[id],out=$('out');out.innerHTML='<div class="res">Analysing…</div>';
+ try{const r=await fetch(e.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(e.body)});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||r.status);
+  const m=j[e.key],good=pick==m;
+  if(good){S.done[e.n]=1;S.facts.push(e.clue);out.innerHTML=`<div class="res">${e.ok.replace('{R}',m)}</div><div class="clue">${e.clue}</div><details><summary>How the AI decided</summary>${e.why(j)}</details>`;if(e.n<3)setTimeout(()=>unlockDoor(e.n),300);if(e.n==3)say('Something clicks inside the archive.');burst(600);refresh()}
+  else out.innerHTML=`<div class="res bad">Not quite. The AI model says ${m}. Try again.</div><details><summary>How the AI decided</summary>${e.why(j)}</details>`}
+ catch(x){out.innerHTML=`<div class="res bad">Analysis failed (${x.message}). Make sure Flask is running (python app.py). No result is shown.</div>`}}
+function finale(){S.over=true;burst(1200);const t="Marcus Hale billed for TX-04, a dead tower. I am at the old TX-04 hut. Come get me.";
+ openP(`<h3>THE BACKUP TAPE</h3><div class="paper" style="font-size:15px">"${t}"<br>— Elias Varga</div><div class="q">Who silenced the broadcast?</div><div class="row"><button onclick="acc(0)">ELIAS VARGA</button><button onclick="acc(1)">MARCUS HALE</button><button onclick="acc(2)">A STRANGER</button></div><div id="out"></div>`,'FINAL EVIDENCE');
+ if(window.speechSynthesis&&S.sound){const u=new SpeechSynthesisUtterance(t);u.rate=.9;u.pitch=.75;speechSynthesis.speak(u)}}
+function acc(k){if(k!=1){$('out').innerHTML='<div class="res bad">Wrong. Recheck the badge, the invoices and the email.</div>';return}
+ openP(`<h3>CASE CLOSED</h3><p>Hale cloned a badge, forced the door at 02:13, and sent the broadcast to the dead TX-04 to bury Elias's announcement. Elias is found alive at the TX-04 hut.</p><div class="kv"><div><span>Evidence found</span><b>${Object.keys(S.found).length}</b></div><div><span>AI analyses</span><b>3/3</b></div><div><span>Time left</span><b>${$('time').textContent}</b></div></div><button onclick="location.reload()">PLAY AGAIN</button>`,'SOLVED')}
+function board(){const n=(i,t,s,c)=>`<div class="node ${S.done[i]?'ok':''}"><b>${S.done[i]?'✔':'○'} ${t}</b><small>${S.done[i]?c:s}</small></div>`;
+ openP(`<h3>Case Board</h3>${n(1,'Who entered?','Unsolved. Check the studio.','Unknown intruder, 02:13 AM')}<div style="text-align:center;color:#775">│</div>${n(2,'Which transmitter?','Unsolved. Explore the corridor.','TX-04, deliberately redirected')}<div style="text-align:center;color:#775">│</div>${n(3,'What was hidden?','Unsolved. Search the archive.','A backup recording exists')}<div style="margin-top:12px;font-size:13px;max-height:170px;overflow:auto"><b style="color:var(--amb);letter-spacing:.15em;font-size:11px">WHAT WE KNOW</b>${S.facts.map(f=>`<div style="margin:5px 0">• ${f}</div>`).join('')||'<div>Nothing yet.</div>'}</div><p class="clue">Objective: ${objective()}</p><small>Evidence found: ${Object.keys(S.found).length}</small>${closeBtn}`,'INVESTIGATION JOURNAL')}
+// ---------- input / movement ----------
+const K={};let yaw=Math.PI*0,pitch=0,lock=false,started=false,hover=null,last=performance.now(),vel=new THREE.Vector3(),bob=0;
+addEventListener('keydown',e=>{K[e.code]=1;if(!started)return;if(e.code=='KeyE'&&!S.open&&hover&&lock)investigate(hover);else if(e.code=='KeyJ'&&!S.over){S.open?closeP():board()}else if(e.code=='Escape'&&S.open&&!S.over)closeP()});
+addEventListener('keyup',e=>K[e.code]=0);
+addEventListener('mousemove',e=>{if(!lock)return;yaw-=e.movementX*.0021;pitch=Math.max(-1.45,Math.min(1.45,pitch-e.movementY*.0021))});
+document.addEventListener('pointerlockchange',()=>{lock=document.pointerLockElement==R.domElement;if(!lock&&!S.open&&!S.over&&started)$('pause').style.display='flex'});
+$('start').onclick=()=>{audio();$('intro').style.display='none';started=true;$('hud').style.display='flex';['ctl','obj','cross'].forEach(i=>$(i).style.display='block');refresh();R.domElement.requestPointerLock();setTimeout(()=>say('Voicemail, Director Hale: "Just a technical fault. Close the case."',6500),2500)};
+$('resume').onclick=()=>{$('pause').style.display='none';R.domElement.requestPointerLock()};
+const RAD=.28;function hit(x,z){for(const s of solids)if(s.on&&s.y1>.35&&s.y0<1.5&&x>s.x0-RAD&&x<s.x1+RAD&&z>s.z0-RAD&&z<s.z1+RAD)return true;return false}
+function move(dt){const sp=K.ShiftLeft||K.ShiftRight?3.8:2.2,dx=(K.KeyD?1:0)-(K.KeyA?1:0),dz=(K.KeyS?1:0)-(K.KeyW?1:0);const c=Math.cos(yaw),s=Math.sin(yaw);
+ const tx=(dx*c+dz*s)*sp,tz=(-dx*s+dz*c)*sp;vel.x+=(tx-vel.x)*Math.min(1,dt*10);vel.z+=(tz-vel.z)*Math.min(1,dt*10);const p=cam.position;
+ let nx=p.x+vel.x*dt;if(!hit(nx,p.z))p.x=nx;else vel.x=0;let nz=p.z+vel.z*dt;if(!hit(p.x,nz))p.z=nz;else vel.z=0;
+ const m=Math.hypot(vel.x,vel.z);bob+=m*dt*2.6;p.y=1.65+Math.sin(bob)*.025*Math.min(1,m/2);if(m>1&&Math.sin(bob)>.98)blip(70,.05,.05)}
+// ---------- suspense events ----------
+const ev=[[25,()=>{burst(900);say('«…ssh… don\'t… trust… the signal… ssh…»',5000)}],[70,()=>{screens[0].userData.warn=1;say('A monitor flickers on: "WARNING: UNAUTHORISED ACCESS 02:13".')}],[120,()=>{thud();say('Somewhere far away, a door slams shut.')}]];
+let flickLight=null;
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1e3);last=now;
+ if(started&&lock&&!S.open){move(dt);S.t-=dt;const el=1200-S.t;ev.forEach(e=>{if(!e.d&&el>e[0]){e.d=1;e[1]()}});if(S.t<=0){S.t=0;S.over=true;openP('<h3>TIME EXPIRED</h3><button onclick="location.reload()">TRY AGAIN</button>','FAILED')}}
+ cam.rotation.set(pitch,yaw,0);$('time').textContent=`${Math.floor(S.t/60)}:${String(Math.floor(S.t%60)).padStart(2,'0')}`;const ri=Math.max(0,Math.min(2,Math.floor((cam.position.x+6)/12)));$('room').textContent=names[ri].toUpperCase();
+ if(ri==1&&!S.enteredC&&started){S.enteredC=1;say('The air is colder here. Pipes hum overhead.');thud()}if(ri==2&&!S.enteredA&&started){S.enteredA=1;say('Dust. Files. Something in here was meant to stay hidden.')}
+ flick.forEach(f=>{if(Math.random()<.015)f.l.intensity=f.base*(.15+Math.random()*.6);else if(Math.random()<.12)f.l.intensity=f.base});
+ onair.visible=Math.random()>.01;if(screens[0].userData.warn)screens[0].material.color.setHex(Math.random()<.5?0x992222:0x331111);else screens.forEach(s=>s.material.color.setHSL(Math.random()<.15?.08:.36,.5,.1+Math.random()*.12));
+ if(Math.random()<.0006)burst(300);
+ const ray=new THREE.Raycaster();ray.far=2.6;ray.setFromCamera({x:0,y:0},cam);const h=ray.intersectObjects(inter.filter(o=>o.visible),false)[0],o=h&&h.object;
+ if(o!==hover){if(hover&&hover.material.emissive)hover.material.emissive.setHex(0);hover=o||null;if(hover){hover.material=hover.material.clone();hover.material.emissive=new THREE.Color(0x5a3c10);if(!hover.userData.flk&&!S.found[hover.userData.id]&&['log','receiver','note'].includes(hover.userData.id)){hover.userData.flk=1;burst(250)}}}
+ const hn=$('hint');if(hover&&started&&!S.open){hn.style.display='block';hn.innerHTML=`${hover.userData.name.toUpperCase()}<b>[E] INVESTIGATE</b>`}else hn.style.display='none';
+ R.render(sc,cam)}
+requestAnimationFrame(loop);window.addEventListener('error',e=>{console.error(e.message)});
+</script></body></html>
