@@ -1,4 +1,6 @@
--e flask
+flask
 scikit-learn
 pandas
 numpy
+gunicorn
+flask-cors
