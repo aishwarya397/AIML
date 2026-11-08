@@ -202,7 +202,7 @@ function investigate(o){const id=o.userData.id;
  if(e.q){if(S.done[e.n])h+=`<div class="res">${e.ok.replace('{R}','')}</div><div class="clue">${e.clue}</div>`;else h+=`<div class="q">${e.q}</div><div class="row">${e.opts.map(o=>`<button onclick="answer('${id}','${o}')">${o}</button>`).join('')}</div><div id="out"></div>`}
  openP(h+closeBtn,e.q?'CLUE':'DETAIL')}
 async function answer(id,pick){const e=E[id],out=$('out');out.innerHTML='<div class="res">Analysing…</div>';
- try{const r=await fetch(e.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(e.body)});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||r.status);
+ try{const r=await fetch('https://aiml-0qnu.onrender.com'+e.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(e.body)});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||r.status);
   const m=j[e.key],good=pick==m;
   if(good){S.done[e.n]=1;S.facts.push(e.clue);out.innerHTML=`<div class="res">${e.ok.replace('{R}',m)}</div><div class="clue">${e.clue}</div><details><summary>How the AI decided</summary>${e.why(j)}</details>`;if(e.n<3)setTimeout(()=>unlockDoor(e.n),300);if(e.n==3)say('Something clicks inside the archive.');burst(600);refresh()}
   else out.innerHTML=`<div class="res bad">Not quite. The AI model says ${m}. Try again.</div><details><summary>How the AI decided</summary>${e.why(j)}</details>`}
